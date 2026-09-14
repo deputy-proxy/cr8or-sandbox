@@ -21,6 +21,10 @@ function isAuthorized(req: Request): boolean {
   return req.header("authorization") === `Bearer ${authToken}`;
 }
 
+function isConnectorAuthorized(req: Request): boolean {
+  return req.params.connectorSecret === authToken;
+}
+
 function buildServer(): McpServer {
   const server = new McpServer({
     name: "railway-sandbox-mcp",
@@ -168,6 +172,15 @@ app.get("/health", (_req, res) => {
 
 app.all("/mcp", (req: Request, res: Response) => {
   if (!isAuthorized(req)) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  void nodeHandler(req, res, req.body);
+});
+
+app.all("/mcp/:connectorSecret", (req: Request, res: Response) => {
+  if (!isConnectorAuthorized(req)) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
