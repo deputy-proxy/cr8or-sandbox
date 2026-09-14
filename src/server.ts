@@ -1,10 +1,9 @@
+import { createMcpExpressApp } from "@modelcontextprotocol/express";
+import { toNodeHandler } from "@modelcontextprotocol/node";
+import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 import express, { type Request, type Response } from "express";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
-import { randomUUID } from "node:crypto";
 import { Sandbox } from "railway";
-import { z } from "zod";
+import * as z from "zod/v4";
 
 const port = Number(process.env.PORT ?? 3000);
 const authToken = process.env.MCP_AUTH_TOKEN;
@@ -13,16 +12,16 @@ if (!authToken) {
   throw new Error("MCP_AUTH_TOKEN is required");
 }
 
-const app = express();
-app.use(express.json({ limit: "1mb" }));
+const allowedHosts = process.env.ALLOWED_HOSTS
+  ?.split(",")
+  .map((host) => host.trim())
+  .filter(Boolean);
 
-const transports = new Map<string, StreamableHTTPServerTransport>();
-
-function authorized(req: Request): boolean {
+function isAuthorized(req: Request): boolean {
   return req.header("authorization") === `Bearer ${authToken}`;
 }
 
-function createServer(): McpServer {
+function buildServer(): McpServer {
   const server = new McpServer({
     name: "railway-sandbox-mcp",
     version: "0.1.0",
@@ -32,7 +31,7 @@ function createServer(): McpServer {
     "sandbox_list",
     {
       description: "List Railway Sandboxes accessible with the configured Railway credentials.",
-      inputSchema: {},
+      inputSchema: z.object({}),
     },
     async () => {
       const sandboxes = await Sandbox.list();
@@ -44,11 +43,11 @@ function createServer(): McpServer {
     "sandbox_create",
     {
       description: "Create a Railway Sandbox for development work and return its ID.",
-      inputSchema: {
+      inputSchema: z.object({
         idleTimeoutMinutes: z.number().int().min(1).max(1440).optional(),
         networkIsolation: z.enum(["ISOLATED", "PRIVATE"]).optional(),
         region: z.string().min(1).max(100).optional(),
-      },
+      }),
     },
     async ({ idleTimeoutMinutes, networkIsolation, region }) => {
       const sandbox = await Sandbox.create({
@@ -56,7 +55,10 @@ function createServer(): McpServer {
         ...(networkIsolation ? { networkIsolation } : {}),
         ...(region ? { region } : {}),
       });
-      return { content: [{ type: "text", text: JSON.stringify({ id: sandbox.id }) }] };
+
+      return {
+        content: [{ type: "text", text: JSON.stringify({ id: sandbox.id }) }],
+      };
     },
   );
 
@@ -64,12 +66,12 @@ function createServer(): McpServer {
     "sandbox_exec",
     {
       description: "Execute a shell command inside an existing Railway Sandbox.",
-      inputSchema: {
+      inputSchema: z.object({
         sandboxId: z.string().min(1),
-        command: z.string().min(1).max(20000),
+        command: z.string().min(1).max(20_000),
         cwd: z.string().min(1).max(4096).optional(),
         timeoutSeconds: z.number().int().min(1).max(900).optional(),
-      },
+      }),
     },
     async ({ sandboxId, command, cwd, timeoutSeconds }) => {
       const sandbox = await Sandbox.connect(sandboxId);
@@ -77,6 +79,7 @@ function createServer(): McpServer {
         ...(cwd ? { cwd } : {}),
         ...(timeoutSeconds ? { timeoutSec: timeoutSeconds } : {}),
       });
+
       return {
         content: [{
           type: "text",
@@ -97,10 +100,10 @@ function createServer(): McpServer {
     "sandbox_read_file",
     {
       description: "Read a UTF-8 text file from a Railway Sandbox.",
-      inputSchema: {
+      inputSchema: z.object({
         sandboxId: z.string().min(1),
         path: z.string().min(1).max(4096),
-      },
+      }),
     },
     async ({ sandboxId, path }) => {
       const sandbox = await Sandbox.connect(sandboxId);
@@ -113,16 +116,21 @@ function createServer(): McpServer {
     "sandbox_write_file",
     {
       description: "Write a UTF-8 text file in a Railway Sandbox.",
-      inputSchema: {
+      inputSchema: z.object({
         sandboxId: z.string().min(1),
         path: z.string().min(1).max(4096),
         content: z.string().max(2_000_000),
-      },
+      }),
     },
     async ({ sandboxId, path, content }) => {
       const sandbox = await Sandbox.connect(sandboxId);
       await sandbox.files.write(path, content);
-      return { content: [{ type: "text", text: JSON.stringify({ path, bytes: Buffer.byteLength(content) }) }] };
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({ path, bytes: Buffer.byteLength(content) }),
+        }],
+      };
     },
   );
 
@@ -130,62 +138,50 @@ function createServer(): McpServer {
     "sandbox_destroy",
     {
       description: "Destroy a Railway Sandbox when development work is complete.",
-      inputSchema: { sandboxId: z.string().min(1) },
+      inputSchema: z.object({ sandboxId: z.string().min(1) }),
     },
     async ({ sandboxId }) => {
       const sandbox = await Sandbox.connect(sandboxId);
       await sandbox.destroy();
-      return { content: [{ type: "text", text: JSON.stringify({ id: sandboxId, destroyed: true }) }] };
+      return {
+        content: [{ type: "text", text: JSON.stringify({ id: sandboxId, destroyed: true }) }],
+      };
     },
   );
 
   return server;
 }
 
+const handler = createMcpHandler(buildServer);
+const nodeHandler = toNodeHandler(handler);
+
+const app = createMcpExpressApp({
+  host: "0.0.0.0",
+  ...(allowedHosts?.length ? { allowedHosts } : {}),
+  jsonLimit: "1mb",
+});
+
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
-app.all("/mcp", async (req: Request, res: Response) => {
-  if (!authorized(req)) {
+app.all("/mcp", (req: Request, res: Response) => {
+  if (!isAuthorized(req)) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
 
-  const sessionId = req.header("mcp-session-id");
-  let transport = sessionId ? transports.get(sessionId) : undefined;
-
-  try {
-    if (!transport) {
-      if (req.method !== "POST" || !isInitializeRequest(req.body)) {
-        res.status(400).json({ error: "MCP session is not initialized" });
-        return;
-      }
-
-      transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: () => randomUUID(),
-        onsessioninitialized: (id) => transports.set(id, transport!),
-        onsessionclosed: (id) => transports.delete(id),
-      });
-
-      await createServer().connect(transport);
-    }
-
-    await transport.handleRequest(req, res, req.body);
-  } catch (error) {
-    if (!res.headersSent) {
-      res.status(500).json({ error: error instanceof Error ? error.message : "Internal server error" });
-    }
-  }
+  void nodeHandler(req, res, req.body);
 });
 
-const server = app.listen(port, () => {
+const httpServer = app.listen(port, "0.0.0.0", () => {
   console.log(`Railway Sandbox MCP listening on port ${port}`);
 });
 
-const shutdown = () => {
-  server.close(() => process.exit(0));
+const shutdown = async () => {
+  await handler.close();
+  httpServer.close(() => process.exit(0));
 };
 
-process.on("SIGTERM", shutdown);
-process.on("SIGINT", shutdown);
+process.on("SIGTERM", () => void shutdown());
+process.on("SIGINT", () => void shutdown());
