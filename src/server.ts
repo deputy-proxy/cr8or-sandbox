@@ -31,7 +31,6 @@ function buildServer(): McpServer {
     "sandbox_list",
     {
       description: "List Railway Sandboxes accessible with the configured Railway credentials.",
-      inputSchema: z.object({}),
     },
     async () => {
       const sandboxes = await Sandbox.list();
@@ -43,11 +42,11 @@ function buildServer(): McpServer {
     "sandbox_create",
     {
       description: "Create a Railway Sandbox for development work and return its ID.",
-      inputSchema: z.object({
+      inputSchema: {
         idleTimeoutMinutes: z.number().int().min(1).max(1440).optional(),
         networkIsolation: z.enum(["ISOLATED", "PRIVATE"]).optional(),
         region: z.string().min(1).max(100).optional(),
-      }),
+      },
     },
     async ({ idleTimeoutMinutes, networkIsolation, region }) => {
       const sandbox = await Sandbox.create({
@@ -66,12 +65,12 @@ function buildServer(): McpServer {
     "sandbox_exec",
     {
       description: "Execute a shell command inside an existing Railway Sandbox.",
-      inputSchema: z.object({
+      inputSchema: {
         sandboxId: z.string().min(1),
         command: z.string().min(1).max(20_000),
         cwd: z.string().min(1).max(4096).optional(),
         timeoutSeconds: z.number().int().min(1).max(900).optional(),
-      }),
+      },
     },
     async ({ sandboxId, command, cwd, timeoutSeconds }) => {
       const sandbox = await Sandbox.connect(sandboxId);
@@ -100,10 +99,10 @@ function buildServer(): McpServer {
     "sandbox_read_file",
     {
       description: "Read a UTF-8 text file from a Railway Sandbox.",
-      inputSchema: z.object({
+      inputSchema: {
         sandboxId: z.string().min(1),
         path: z.string().min(1).max(4096),
-      }),
+      },
     },
     async ({ sandboxId, path }) => {
       const sandbox = await Sandbox.connect(sandboxId);
@@ -116,11 +115,11 @@ function buildServer(): McpServer {
     "sandbox_write_file",
     {
       description: "Write a UTF-8 text file in a Railway Sandbox.",
-      inputSchema: z.object({
+      inputSchema: {
         sandboxId: z.string().min(1),
         path: z.string().min(1).max(4096),
         content: z.string().max(2_000_000),
-      }),
+      },
     },
     async ({ sandboxId, path, content }) => {
       const sandbox = await Sandbox.connect(sandboxId);
@@ -138,7 +137,9 @@ function buildServer(): McpServer {
     "sandbox_destroy",
     {
       description: "Destroy a Railway Sandbox when development work is complete.",
-      inputSchema: z.object({ sandboxId: z.string().min(1) }),
+      inputSchema: {
+        sandboxId: z.string().min(1),
+      },
     },
     async ({ sandboxId }) => {
       const sandbox = await Sandbox.connect(sandboxId);
