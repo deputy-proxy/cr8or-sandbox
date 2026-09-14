@@ -11,15 +11,17 @@
     "dev": "tsx src/server.ts"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.30.0",
+    "@modelcontextprotocol/express": "2.0.0",
+    "@modelcontextprotocol/node": "2.0.0",
+    "@modelcontextprotocol/server": "2.0.0",
     "express": "5.2.1",
     "railway": "3.11.0",
     "zod": "4.1.12"
   },
   "devDependencies": {
     "@types/express": "5.0.5",
-    "@types/node": "24.10.1",
+    "@types/node": "26.5.1",
     "tsx": "4.20.6",
-    "typescript": "5.9.3"
+    "typescript": "6.0.3"
   }
 }
