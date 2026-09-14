@@ -76,6 +76,7 @@ export class DevelopmentSandboxManager {
         const worktreePath = repositoryWorktreePath(repository);
         const clone = await sandbox.exec(`mkdir -p $(dirname ${quote(worktreePath)}) && git clone ${quote(repositoryUrl)} ${quote(worktreePath)}`, { cwd: "/root", timeoutSec: 180 });
         if (clone.exitCode !== 0 || clone.timedOut) throw new Error(`Repository clone failed: ${clone.stderr || clone.stdout}`);
+        await this.reconcileToolchain(sandbox, worktreePath);
         await this.validate(sandbox, worktreePath);
         const record: RepositorySandboxRecord = { repository, repositoryUrl, sandboxId: sandbox.id, worktreePath, updatedAt: new Date().toISOString() };
         await sandbox.files.write(REPOSITORY_MARKER, `${JSON.stringify(record, null, 2)}\n`);
@@ -112,9 +113,55 @@ export class DevelopmentSandboxManager {
       "git clean -fdx",
     ].join(" && "), { cwd: record.worktreePath, timeoutSec: 120 });
     if (result.exitCode !== 0 || result.timedOut) throw new Error(`Repository synchronization failed: ${result.stderr || result.stdout}`);
+    await this.reconcileToolchain(sandbox, record.worktreePath);
     await this.validate(sandbox, record.worktreePath);
     await this.checkout(sandbox, record, options.branch);
     await sandbox.files.write(REPOSITORY_MARKER, `${JSON.stringify({ ...record, repositoryUrl: options.repositoryUrl, updatedAt: new Date().toISOString() }, null, 2)}\n`);
+  }
+
+  private async reconcileToolchain(sandbox: Sandbox, cwd: string): Promise<void> {
+    const probe = await sandbox.exec(
+      "node --version 2>/dev/null || true; php --version 2>/dev/null | head -1 || true; composer --version 2>/dev/null || true",
+      { cwd, timeoutSec: 30 },
+    );
+
+    if (probe.timedOut) throw new Error(`Toolchain probe timed out: ${probe.stderr || probe.stdout}`);
+
+    const needsNode = !/\bv22\./.test(probe.stdout);
+    const needsPhp = !/\bPHP 8\.4\./.test(probe.stdout);
+    const needsComposer = !/\bComposer version 2\./.test(probe.stdout);
+
+    if (!needsNode && !needsPhp && !needsComposer) return;
+
+    const commands = [
+      "apt-get update",
+      "apt-get install -y --no-install-recommends git curl ca-certificates unzip",
+    ];
+
+    if (needsNode) {
+      commands.push(
+        "curl -fsSL https://deb.nodesource.com/setup_22.x | bash -",
+        "apt-get update",
+        "apt-get install -y --allow-downgrades --no-install-recommends nodejs",
+      );
+    }
+
+    if (needsPhp) {
+      commands.push("apt-get install -y --no-install-recommends php8.4-cli");
+    }
+
+    if (needsComposer) {
+      commands.push(
+        "curl -fsSL https://getcomposer.org/installer -o /tmp/composer-setup.php",
+        "php /tmp/composer-setup.php --install-dir=/usr/local/bin --filename=composer",
+        "rm -f /tmp/composer-setup.php",
+      );
+    }
+
+    const result = await sandbox.exec(commands.join(" && "), { cwd: "/root", timeoutSec: 180 });
+    if (result.exitCode !== 0 || result.timedOut) {
+      throw new Error(`Toolchain reconciliation failed: ${result.stderr || result.stdout}`);
+    }
   }
 
   private async validate(sandbox: Sandbox, cwd: string): Promise<void> {
