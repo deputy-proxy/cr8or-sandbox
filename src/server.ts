@@ -33,7 +33,7 @@ function isConnectorAuthorized(req: Request): boolean {
 function buildServer(): McpServer {
   const server = new McpServer({
     name: "railway-sandbox-mcp",
-    version: "0.1.0",
+    version: "0.2.0",
   });
 
   server.registerTool(
