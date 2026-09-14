@@ -36,9 +36,7 @@ function createServer(): McpServer {
     },
     async () => {
       const sandboxes = await Sandbox.list();
-      return {
-        content: [{ type: "text", text: JSON.stringify(sandboxes) }],
-      };
+      return { content: [{ type: "text", text: JSON.stringify(sandboxes) }] };
     },
   );
 
@@ -54,13 +52,11 @@ function createServer(): McpServer {
     },
     async ({ idleTimeoutMinutes, networkIsolation, region }) => {
       const sandbox = await Sandbox.create({
-        ...(idleTimeoutMinutes !== undefined ? { idleTimeout: idleTimeoutMinutes * 60 } : {}),
+        ...(idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes } : {}),
         ...(networkIsolation ? { networkIsolation } : {}),
         ...(region ? { region } : {}),
       });
-      return {
-        content: [{ type: "text", text: JSON.stringify({ id: sandbox.id }) }],
-      };
+      return { content: [{ type: "text", text: JSON.stringify({ id: sandbox.id }) }] };
     },
   );
 
@@ -79,7 +75,7 @@ function createServer(): McpServer {
       const sandbox = await Sandbox.connect(sandboxId);
       const result = await sandbox.exec(command, {
         ...(cwd ? { cwd } : {}),
-        ...(timeoutSeconds ? { timeout: timeoutSeconds * 1000 } : {}),
+        ...(timeoutSeconds ? { timeoutSec: timeoutSeconds } : {}),
       });
       return {
         content: [{
@@ -88,9 +84,11 @@ function createServer(): McpServer {
             stdout: result.stdout,
             stderr: result.stderr,
             exitCode: result.exitCode,
+            timedOut: result.timedOut,
+            truncated: result.truncated,
           }),
         }],
-        isError: result.exitCode !== 0,
+        isError: result.exitCode !== 0 || result.timedOut === true,
       };
     },
   );
