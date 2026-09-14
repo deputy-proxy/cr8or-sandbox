@@ -17,6 +17,8 @@ This keeps development infrastructure separate from the application repositories
 
 ## Tools
 
+## Tools
+
 | Tool | Purpose |
 | --- | --- |
 | `sandbox_list` | List accessible Railway Sandboxes |
@@ -25,8 +27,7 @@ This keeps development infrastructure separate from the application repositories
 | `sandbox_read_file` | Read a UTF-8 file from a sandbox |
 | `sandbox_write_file` | Write a UTF-8 file to a sandbox |
 | `sandbox_destroy` | Destroy a sandbox |
-
-`sandbox_exec` intentionally exposes a shell because the point of this service is to provide a real development environment. Authentication and Railway project credentials therefore need to be treated as production secrets, not as decorative environment variables.
+| `repository_prepare` | Find or create the persistent development Sandbox for a repository and prepare its issue branch |
 
 ## Requirements
 
@@ -81,25 +82,32 @@ http://localhost:3000/health
 
 Railway's current MCP guidance uses Streamable HTTP for hosted MCP servers. The current MCP TypeScript SDK v2 implements the 2026-07-28 protocol revision and can serve 2025-era traffic statelessly as a compatibility fallback.
 
-## Development workflow
+## Persistent repository Sandboxes
 
-A typical sandbox session can be created once and reused:
+The repository-aware development workflow uses one persistent Railway Sandbox per repository.
+
+The model is:
 
 ```text
-sandbox_create
-  -> sandbox_exec: git clone ... /root/workspace
-  -> sandbox_exec: composer install
-  -> sandbox_exec: npm install
-  -> sandbox_exec: php artisan test
-  -> sandbox_exec: vendor/bin/pint --test
-  -> sandbox_exec: vendor/bin/phpstan analyse
-  -> sandbox_exec: npm run build
-  -> sandbox_read_file / sandbox_exec for diagnostics
-  -> sandbox_write_file for targeted edits
-  -> sandbox_exec: git status / git diff
+repository
+    |
+    v
+repository_prepare
+    |
+    +-- existing usable Sandbox?
+    |       |
+    |       +-- yes -> reconnect -> synchronize -> checkout issue branch
+    |
+    +-- no -> create Sandbox from development template
+                 |
+                 +-- install Git
+                 +-- install Node.js 22
+                 +-- install PHP 8.4
+                 +-- install Composer 2
+                 +-- clone repository
+                 +-- persist repository marker
+                 +-- checkout issue branch
 ```
-
-The sandbox is separate from the MCP service process, so application dependencies, Composer state, PHP tooling, Node tooling, and repository files remain inside the sandbox.
 
 ## Security model
 
