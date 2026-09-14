@@ -4,9 +4,14 @@ import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 import { type Request, type Response } from "express";
 import { Sandbox } from "railway";
 import * as z from "zod/v4";
+import {
+  DevelopmentSandboxManager,
+  normalizeRepositoryIdentity,
+} from "./sandbox-manager.js";
 
 const port = Number(process.env.PORT ?? 3000);
 const authToken = process.env.MCP_AUTH_TOKEN;
+const developmentSandboxManager = new DevelopmentSandboxManager();
 
 if (!authToken) {
   throw new Error("MCP_AUTH_TOKEN is required");
@@ -150,6 +155,57 @@ function buildServer(): McpServer {
       await sandbox.destroy();
       return {
         content: [{ type: "text", text: JSON.stringify({ id: sandboxId, destroyed: true }) }],
+      };
+    },
+  );
+
+  server.registerTool(
+    "repository_prepare",
+    {
+      description:
+        "Find or create the persistent development Sandbox for a GitHub repository and prepare its issue branch.",
+      inputSchema: z.object({
+        repository: z.string().min(1),
+        repositoryUrl: z.string().url(),
+        branch: z.string().min(1),
+        worktreePath: z.string().min(1).max(4096).optional(),
+        idleTimeoutMinutes: z.number().int().min(1).max(1440).optional(),
+        networkIsolation: z.enum(["ISOLATED", "PRIVATE"]).optional(),
+        region: z.string().min(1).max(100).optional(),
+      }),
+    },
+    async ({
+      repository,
+      repositoryUrl,
+      branch,
+      worktreePath,
+      idleTimeoutMinutes,
+      networkIsolation,
+      region,
+    }) => {
+      const result = await developmentSandboxManager.prepareRepository({
+        repository: normalizeRepositoryIdentity(repository),
+        repositoryUrl,
+        branch,
+        ...(worktreePath ? { worktreePath } : {}),
+        ...(idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes } : {}),
+        ...(networkIsolation ? { networkIsolation } : {}),
+        ...(region ? { region } : {}),
+      });
+  
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              sandboxId: result.sandbox.id,
+              repository: result.record.repository,
+              worktreePath: result.record.worktreePath,
+              branch,
+              reused: result.reused,
+            }),
+          },
+        ],
       };
     },
   );
