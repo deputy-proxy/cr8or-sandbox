@@ -4,50 +4,48 @@ import { describe, it } from "node:test";
 import {
   DEFAULT_WORKSPACE_ROOT,
   REPOSITORY_MARKER,
+  normalizeGitHubRepositoryUrl,
   normalizeRepositoryIdentity,
   repositoryWorktreePath,
 } from "../src/sandbox-manager.js";
 
 describe("normalizeRepositoryIdentity", () => {
   it("accepts owner/name", () => {
+    assert.equal(normalizeRepositoryIdentity("deputy-proxy/valid-guide"), "deputy-proxy/valid-guide");
+  });
+
+  it("accepts GitHub HTTPS URLs", () => {
     assert.equal(
-      normalizeRepositoryIdentity("deputy-proxy/valid-guide"),
+      normalizeRepositoryIdentity("https://github.com/deputy-proxy/valid-guide.git"),
       "deputy-proxy/valid-guide",
     );
   });
 
-  it("accepts a GitHub HTTPS URL", () => {
+  it("accepts GitHub HTTP URLs", () => {
     assert.equal(
-      normalizeRepositoryIdentity(
-        "https://github.com/deputy-proxy/valid-guide.git",
-      ),
+      normalizeRepositoryIdentity("http://github.com/deputy-proxy/valid-guide/"),
       "deputy-proxy/valid-guide",
     );
   });
 
-  it("accepts a GitHub HTTP URL", () => {
+  it("rejects invalid identities", () => {
+    assert.throws(() => normalizeRepositoryIdentity("valid-guide"), /Invalid GitHub repository identity/);
+    assert.throws(() => normalizeRepositoryIdentity("deputy-proxy/valid-guide/extra"), /Invalid GitHub repository identity/);
+  });
+});
+
+describe("normalizeGitHubRepositoryUrl", () => {
+  it("normalizes a GitHub URL", () => {
     assert.equal(
-      normalizeRepositoryIdentity(
-        "http://github.com/deputy-proxy/valid-guide/",
-      ),
-      "deputy-proxy/valid-guide",
+      normalizeGitHubRepositoryUrl("https://github.com/deputy-proxy/valid-guide"),
+      "https://github.com/deputy-proxy/valid-guide.git",
     );
   });
 
-  it("rejects an invalid repository identity", () => {
+  it("rejects non-GitHub URLs", () => {
     assert.throws(
-      () => normalizeRepositoryIdentity("valid-guide"),
-      /Invalid repository identity/,
-    );
-  });
-
-  it("rejects a repository with too many path components", () => {
-    assert.throws(
-      () =>
-        normalizeRepositoryIdentity(
-          "deputy-proxy/valid-guide/extra",
-        ),
-      /Invalid repository identity/,
+      () => normalizeGitHubRepositoryUrl("https://gitlab.com/deputy-proxy/valid-guide.git"),
+      /HTTPS GitHub URL/,
     );
   });
 });
@@ -62,10 +60,7 @@ describe("repositoryWorktreePath", () => {
 
   it("supports a custom root", () => {
     assert.equal(
-      repositoryWorktreePath(
-        "deputy-proxy/valid-guide",
-        "/workspace",
-      ),
+      repositoryWorktreePath("deputy-proxy/valid-guide", "/workspace"),
       "/workspace/deputy-proxy/valid-guide",
     );
   });
@@ -73,9 +68,6 @@ describe("repositoryWorktreePath", () => {
 
 describe("repository marker", () => {
   it("uses a stable marker path", () => {
-    assert.equal(
-      REPOSITORY_MARKER,
-      "/root/.railway-sandbox-mcp/repository.json",
-    );
+    assert.equal(REPOSITORY_MARKER, "/root/.railway-sandbox-mcp/repository.json");
   });
 });
