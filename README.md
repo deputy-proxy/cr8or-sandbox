@@ -5,17 +5,10 @@ A small remote MCP server that exposes Railway Sandboxes as a development execut
 The intended loop is:
 
 ```text
-ChatGPT
-  -> remote MCP /mcp
-  -> Railway Sandbox MCP
-  -> Railway TypeScript SDK
-  -> Railway Sandbox
-  -> git / PHP / Composer / Artisan / npm / tests
+ChatGPT -> remote MCP /mcp -> Railway Sandbox MCP -> Railway SDK -> Railway Sandbox -> git / PHP / Composer / Artisan / npm / tests
 ```
 
 This keeps development infrastructure separate from the application repositories being worked on.
-
-## Tools
 
 ## Tools
 
@@ -38,90 +31,61 @@ This keeps development infrastructure separate from the application repositories
 
 ## Environment
 
-Copy `.env.example` and configure:
-
-- `MCP_AUTH_TOKEN`: long random secret required on every `/mcp` request.
-- `RAILWAY_TOKEN`: recommended Railway project token. `RAILWAY_API_TOKEN` is also supported by the SDK.
-- `RAILWAY_ENVIRONMENT_ID`: Railway environment containing the sandboxes.
-- `ALLOWED_HOSTS`: optional comma-separated public hostnames accepted by MCP host validation.
-- `PORT`: supplied automatically by Railway.
-
-Do not commit real credentials.
+Copy `.env.example` and configure `MCP_AUTH_TOKEN`, `RAILWAY_TOKEN`, `RAILWAY_ENVIRONMENT_ID`, and optionally `ALLOWED_HOSTS`. `PORT` is supplied by Railway. Do not commit real credentials.
 
 ## Run locally
 
 ```bash
 npm install
 npm run check
+npm run test
 npm run build
 MCP_AUTH_TOKEN=change-me RAILWAY_TOKEN=... RAILWAY_ENVIRONMENT_ID=... npm start
 ```
 
-The MCP endpoint is:
-
-```text
-http://localhost:3000/mcp
-```
-
-The health endpoint is:
-
-```text
-http://localhost:3000/health
-```
-
-## Deploy to Railway
-
-1. Create a Railway service from this GitHub repository.
-2. Configure `MCP_AUTH_TOKEN`.
-3. Configure `RAILWAY_TOKEN` with a project token scoped to the environment that should own the sandboxes.
-4. Configure `RAILWAY_ENVIRONMENT_ID`.
-5. Deploy the service.
-6. Generate a public domain for the service.
-7. Set `ALLOWED_HOSTS` to the generated hostname if host allow-listing is desired.
-8. Use the resulting `https://.../mcp` URL as the remote MCP endpoint.
-
-Railway's current MCP guidance uses Streamable HTTP for hosted MCP servers. The current MCP TypeScript SDK v2 implements the 2026-07-28 protocol revision and can serve 2025-era traffic statelessly as a compatibility fallback.
+The MCP endpoint is `http://localhost:3000/mcp` and the health endpoint is `http://localhost:3000/health`.
 
 ## Persistent repository Sandboxes
 
-The repository-aware development workflow uses one persistent Railway Sandbox per repository.
-
-The model is:
+The repository-aware workflow uses **one persistent Railway Sandbox per repository**. The Sandbox survives MCP process restarts and is discovered again with `Sandbox.list()` and `Sandbox.connect()`.
 
 ```text
-repository
-    |
-    v
-repository_prepare
-    |
-    +-- existing usable Sandbox?
-    |       |
-    |       +-- yes -> reconnect -> synchronize -> checkout issue branch
-    |
-    +-- no -> create Sandbox from development template
+repository -> repository_prepare
                  |
-                 +-- install Git
-                 +-- install Node.js 22
-                 +-- install PHP 8.4
-                 +-- install Composer 2
-                 +-- clone repository
-                 +-- persist repository marker
-                 +-- checkout issue branch
+                 +-> existing usable Sandbox -> reconnect -> synchronize -> checkout issue branch
+                 |
+                 +-> no usable Sandbox -> create -> install toolchain -> clone -> persist marker -> checkout
 ```
+
+The development template provisions Git, Node.js 22, PHP 8.4, and Composer 2. The repository marker is `/root/.railway-sandbox-mcp/repository.json` and contains repository metadata plus the Sandbox ID. Credentials are never stored there.
+
+Each issue uses a normal Git branch inside the same persistent repository worktree. Before preparing an issue, the manager fetches remote state, resets the worktree to `origin/HEAD`, removes untracked files, and checks out the requested branch. If that branch does not exist remotely, it is created from the default branch.
+
+A repository-specific in-process lock prevents concurrent preparation of the same repository within one MCP instance. It is not distributed across multiple MCP replicas.
+
+Repository Sandboxes are persistent by default. An explicit idle timeout can still be supplied, subject to Railway plan limits.
+
+## Development loop
+
+```text
+repository_prepare -> persistent Sandbox -> issue branch
+       -> inspect -> implement -> test -> lint/static analysis -> diff
+       -> commit -> push -> GitHub Actions
+       -> merge, or diagnose root cause and fix
+       -> next issue -> same Sandbox
+```
+
+The high-level `repository_prepare` tool is the preferred entry point for repository development. The lower-level `sandbox_*` tools remain available for direct Sandbox administration and troubleshooting.
 
 ## Security model
 
-The server is intentionally small:
-
-- The MCP endpoint requires a bearer token before any MCP request reaches the handler.
+- The MCP endpoint requires a bearer token before MCP requests reach the handler.
 - Railway credentials remain only in the MCP service environment.
-- Sandbox command execution occurs inside Railway's isolated sandbox infrastructure, not in the MCP service container.
-- `sandbox_exec` has bounded command length and timeout values.
-- File writes have a bounded payload size.
-- The service exposes only the six sandbox operations above.
+- Sandbox command execution occurs inside Railway Sandbox infrastructure.
+- Command execution and file writes have bounded input sizes/timeouts.
+- Repository markers contain no credentials.
+- Repository preparation uses isolated network mode by default unless private Railway service access is explicitly requested.
 
-For stronger isolation, create sandboxes with `networkIsolation: "ISOLATED"` unless private Railway service access is explicitly required.
+## Deployment
 
-## Why this exists
-
-The built-in execution environment used by ChatGPT cannot be relied on as a networked development workstation for GitHub repositories. This service moves the actual development loop into a Railway Sandbox where Git, Composer, PHP, Node, and project dependencies can access the network normally.
+Create a Railway service from this repository, configure the required environment variables, generate a public domain, and use the resulting `/mcp` endpoint as the remote MCP endpoint. Set `ALLOWED_HOSTS` to the generated hostname when host allow-listing is desired.
