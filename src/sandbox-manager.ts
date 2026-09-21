@@ -42,7 +42,11 @@ export function resolveNodeMajor(requirement: string, preferredMajor = 24): numb
   if (exact) return Number(exact[1]);
 
   const bounded = normalized.match(/^(?:>=\s*)?(\d+)(?:\.\d+)?(?:\.\d+)?\s*<\s*(\d+)/);
-  if (bounded) {\n    const minimumMajor = Number(bounded[1]);\n    const maximumMajor = Number(bounded[2]);\n    return preferredMajor >= minimumMajor && preferredMajor < maximumMajor ? preferredMajor : minimumMajor;\n  }
+  if (bounded) {
+    const minimumMajor = Number(bounded[1]);
+    const maximumMajor = Number(bounded[2]);
+    return preferredMajor >= minimumMajor && preferredMajor < maximumMajor ? preferredMajor : minimumMajor;
+  }
 
   const caretOrTilde = normalized.match(/^[~^](\d+)/);
   if (caretOrTilde) return Number(caretOrTilde[1]);
@@ -101,7 +105,8 @@ export class DevelopmentSandboxManager {
         await this.reconcileToolchain(sandbox, worktreePath);
         await this.validate(sandbox, worktreePath);
         const record: RepositorySandboxRecord = { repository, repositoryUrl, sandboxId: sandbox.id, worktreePath, updatedAt: new Date().toISOString() };
-        await sandbox.files.write(REPOSITORY_MARKER, `${JSON.stringify(record, null, 2)}\n`);
+        await sandbox.files.write(REPOSITORY_MARKER, `${JSON.stringify(record, null, 2)}
+`);
         await this.checkout(sandbox, record, options.branch);
         return { sandbox, record, reused: false };
       } catch (error) {
@@ -138,7 +143,8 @@ export class DevelopmentSandboxManager {
     await this.reconcileToolchain(sandbox, record.worktreePath);
     await this.validate(sandbox, record.worktreePath);
     await this.checkout(sandbox, record, options.branch);
-    await sandbox.files.write(REPOSITORY_MARKER, `${JSON.stringify({ ...record, repositoryUrl: options.repositoryUrl, updatedAt: new Date().toISOString() }, null, 2)}\n`);
+    await sandbox.files.write(REPOSITORY_MARKER, `${JSON.stringify({ ...record, repositoryUrl: options.repositoryUrl, updatedAt: new Date().toISOString() }, null, 2)}
+`);
   }
 
   private async reconcileToolchain(sandbox: Sandbox, cwd: string): Promise<void> {
@@ -215,7 +221,8 @@ export class DevelopmentSandboxManager {
       "else",
       `  git checkout -B ${branchName} origin/HEAD`,
       "fi",
-    ].join("\n"), { cwd: record.worktreePath, timeoutSec: 120 });
+    ].join("
+"), { cwd: record.worktreePath, timeoutSec: 120 });
     if (result.exitCode !== 0 || result.timedOut) throw new Error(`Branch preparation failed: ${result.stderr || result.stdout}`);
   }
 
