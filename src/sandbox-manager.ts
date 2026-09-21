@@ -41,7 +41,7 @@ export function repositoryWorktreePath(repository: string, root = DEFAULT_WORKSP
 export function createDevelopmentSandboxTemplate(): SandboxTemplate {
   return Sandbox.template()
     .withPackages("git", "curl", "ca-certificates", "unzip")
-    .run("curl -fsSL https://deb.nodesource.com/setup_22.x | bash -")
+    .run("curl -fsSL https://deb.nodesource.com/setup_24.x | bash -")
     .run("apt-get update && apt-get install -y --no-install-recommends nodejs")
     .run("apt-get update && apt-get install -y --no-install-recommends php8.4-cli")
     .run("curl -fsSL https://getcomposer.org/installer -o /tmp/composer-setup.php")
@@ -127,7 +127,7 @@ export class DevelopmentSandboxManager {
 
     if (probe.timedOut) throw new Error(`Toolchain probe timed out: ${probe.stderr || probe.stdout}`);
 
-    const needsNode = !/\bv22\./.test(probe.stdout);
+    const needsNode = !/\bv24\./.test(probe.stdout);
     const needsPhp = !/\bPHP 8\.4\./.test(probe.stdout);
     const needsComposer = !/\bComposer version 2\./.test(probe.stdout);
 
@@ -140,7 +140,7 @@ export class DevelopmentSandboxManager {
 
     if (needsNode) {
       commands.push(
-        "curl -fsSL https://deb.nodesource.com/setup_22.x | bash -",
+        "curl -fsSL https://deb.nodesource.com/setup_24.x | bash -",
         "apt-get update",
         "apt-get install -y --allow-downgrades --no-install-recommends nodejs",
       );
@@ -167,7 +167,7 @@ export class DevelopmentSandboxManager {
   private async validate(sandbox: Sandbox, cwd: string): Promise<void> {
     const result = await sandbox.exec("git --version && node --version && php --version && composer --version", { cwd, timeoutSec: 30 });
     if (result.exitCode !== 0 || result.timedOut) throw new Error(`Toolchain validation failed: ${result.stderr || result.stdout}`);
-    for (const [name, pattern] of [["Node", /v22\./], ["PHP", /PHP 8\.4\./], ["Composer", /Composer version 2\./]] as const) {
+    for (const [name, pattern] of [["Node", /v24\./], ["PHP", /PHP 8\.4\./], ["Composer", /Composer version 2\./]] as const) {
       if (!pattern.test(result.stdout)) throw new Error(`${name} requirement not satisfied: ${result.stdout}`);
     }
   }
