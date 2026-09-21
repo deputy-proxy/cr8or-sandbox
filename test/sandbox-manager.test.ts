@@ -82,7 +82,8 @@ describe("resolveNodeMajor", () => {
   });
 
   it("uses the lower bound for bounded ranges", () => {
-    assert.equal(resolveNodeMajor(">=20 <22"), 20);\n    assert.equal(resolveNodeMajor(">=22 <25"), 24);
+    assert.equal(resolveNodeMajor(">=20 <22"), 20);
+    assert.equal(resolveNodeMajor(">=22 <25"), 24);
   });
 
   it("uses the preferred current major for open minimum ranges", () => {
