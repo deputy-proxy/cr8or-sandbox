@@ -42,7 +42,7 @@ export function resolveNodeMajor(requirement: string, preferredMajor = 24): numb
   if (exact) return Number(exact[1]);
 
   const bounded = normalized.match(/^(?:>=\s*)?(\d+)(?:\.\d+)?(?:\.\d+)?\s*<\s*(\d+)/);
-  if (bounded) return Number(bounded[1]);
+  if (bounded) {\n    const minimumMajor = Number(bounded[1]);\n    const maximumMajor = Number(bounded[2]);\n    return preferredMajor >= minimumMajor && preferredMajor < maximumMajor ? preferredMajor : minimumMajor;\n  }
 
   const caretOrTilde = normalized.match(/^[~^](\d+)/);
   if (caretOrTilde) return Number(caretOrTilde[1]);
