@@ -7,6 +7,7 @@ import {
   normalizeGitHubRepositoryUrl,
   normalizeRepositoryIdentity,
   repositoryWorktreePath,
+  resolveNodeMajor,
 } from "../src/sandbox-manager.js";
 
 describe("normalizeRepositoryIdentity", () => {
@@ -69,5 +70,27 @@ describe("repositoryWorktreePath", () => {
 describe("repository marker", () => {
   it("uses a stable marker path", () => {
     assert.equal(REPOSITORY_MARKER, "/root/.railway-sandbox-mcp/repository.json");
+  });
+});
+
+
+describe("resolveNodeMajor", () => {
+  it("uses the exact repository major when specified", () => {
+    assert.equal(resolveNodeMajor("22"), 22);
+    assert.equal(resolveNodeMajor("22.x"), 22);
+    assert.equal(resolveNodeMajor("^22.0.0"), 22);
+  });
+
+  it("uses the lower bound for bounded ranges", () => {
+    assert.equal(resolveNodeMajor(">=20 <22"), 20);
+    assert.equal(resolveNodeMajor(">=22 <25"), 24);
+  });
+
+  it("uses the preferred current major for open minimum ranges", () => {
+    assert.equal(resolveNodeMajor(">=22"), 24);
+  });
+
+  it("uses the preferred major when no requirement is declared", () => {
+    assert.equal(resolveNodeMajor(""), 24);
   });
 });
