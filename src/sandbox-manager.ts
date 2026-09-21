@@ -33,6 +33,28 @@ export function normalizeGitHubRepositoryUrl(repositoryUrl: string): string {
   return `https://github.com/${normalizeRepositoryIdentity(url.pathname.slice(1))}.git`;
 }
 
+export function resolveNodeMajor(requirement: string, preferredMajor = 24): number {
+  const normalized = requirement.trim().replace(/^v/, "");
+
+  if (!normalized || normalized === "*" || normalized === "latest") return preferredMajor;
+
+  const exact = normalized.match(/^(?:=|v)?(\d+)(?:\.x)?(?:\.\d+)?(?:\.\d+)?$/);
+  if (exact) return Number(exact[1]);
+
+  const bounded = normalized.match(/^(?:>=\s*)?(\d+)(?:\.\d+)?(?:\.\d+)?\s*<\s*(\d+)/);
+  if (bounded) return Number(bounded[1]);
+
+  const caretOrTilde = normalized.match(/^[~^](\d+)/);
+  if (caretOrTilde) return Number(caretOrTilde[1]);
+
+  const majorRange = normalized.match(/(?:^|\s)(\d+)\.x(?:$|\s)/);
+  if (majorRange) return Number(majorRange[1]);
+
+  const minimum = normalized.match(/^>=\s*(\d+)/);
+  if (minimum) return Math.max(Number(minimum[1]), preferredMajor);
+
+  throw new Error(`Unsupported Node.js version requirement: ${requirement}`);
+}
 export function repositoryWorktreePath(repository: string, root = DEFAULT_WORKSPACE_ROOT): string {
   const [owner, name] = normalizeRepositoryIdentity(repository).split("/");
   return `${root}/${owner}/${name}`;
@@ -127,7 +149,9 @@ export class DevelopmentSandboxManager {
 
     if (probe.timedOut) throw new Error(`Toolchain probe timed out: ${probe.stderr || probe.stdout}`);
 
-    const needsNode = !/\bv24\./.test(probe.stdout);
+    const requirement = await this.detectNodeRequirement(sandbox, cwd);
+    const nodeMajor = resolveNodeMajor(requirement);
+    const needsNode = !new RegExp(`\\bv${nodeMajor}\\.`).test(probe.stdout);
     const needsPhp = !/\bPHP 8\.4\./.test(probe.stdout);
     const needsComposer = !/\bComposer version 2\./.test(probe.stdout);
 
@@ -140,7 +164,7 @@ export class DevelopmentSandboxManager {
 
     if (needsNode) {
       commands.push(
-        "curl -fsSL https://deb.nodesource.com/setup_24.x | bash -",
+        `curl -fsSL https://deb.nodesource.com/setup_${nodeMajor}.x | bash -`,
         "apt-get update",
         "apt-get install -y --allow-downgrades --no-install-recommends nodejs",
       );
@@ -164,10 +188,20 @@ export class DevelopmentSandboxManager {
     }
   }
 
+  private async detectNodeRequirement(sandbox: Sandbox, cwd: string): Promise<string> {
+    const result = await sandbox.exec(
+      "node -e 'const fs=require(\"fs\"); let r=\"\"; for (const f of [\".nvmrc\",\".node-version\"]) { if (fs.existsSync(f)) { r=fs.readFileSync(f,\"utf8\").trim(); break; } } if (!r && fs.existsSync(\"package.json\")) r=JSON.parse(fs.readFileSync(\"package.json\",\"utf8\")).engines?.node ?? \"\"; process.stdout.write(r);'",
+      { cwd, timeoutSec: 15 },
+    );
+    if (result.exitCode !== 0 || result.timedOut) throw new Error(`Node.js requirement detection failed: ${result.stderr || result.stdout}`);
+    return result.stdout.trim() || ">=22";
+  }
   private async validate(sandbox: Sandbox, cwd: string): Promise<void> {
+    const requirement = await this.detectNodeRequirement(sandbox, cwd);
+    const nodeMajor = resolveNodeMajor(requirement);
     const result = await sandbox.exec("git --version && node --version && php --version && composer --version", { cwd, timeoutSec: 30 });
     if (result.exitCode !== 0 || result.timedOut) throw new Error(`Toolchain validation failed: ${result.stderr || result.stdout}`);
-    for (const [name, pattern] of [["Node", /v24\./], ["PHP", /PHP 8\.4\./], ["Composer", /Composer version 2\./]] as const) {
+    for (const [name, pattern] of [["Node", new RegExp(`\\bv${nodeMajor}\\.`)], ["PHP", /PHP 8\.4\./], ["Composer", /Composer version 2\./]] as const) {
       if (!pattern.test(result.stdout)) throw new Error(`${name} requirement not satisfied: ${result.stdout}`);
     }
   }
