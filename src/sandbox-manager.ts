@@ -69,7 +69,7 @@ export function createDevelopmentSandboxTemplate(): SandboxTemplate {
     .withPackages("git", "curl", "ca-certificates", "unzip")
     .run("curl -fsSL https://deb.nodesource.com/setup_24.x | bash -")
     .run("apt-get update && apt-get install -y --no-install-recommends nodejs")
-    .run("apt-get update && apt-get install -y --no-install-recommends php8.4-cli")
+    .run("apt-get update && apt-get install -y --no-install-recommends php-cli")
     .run("curl -fsSL https://getcomposer.org/installer -o /tmp/composer-setup.php")
     .run("php /tmp/composer-setup.php --install-dir=/usr/local/bin --filename=composer")
     .run("rm -f /tmp/composer-setup.php")
@@ -156,7 +156,7 @@ export class DevelopmentSandboxManager {
     const requirement = await this.detectNodeRequirement(sandbox, cwd);
     const nodeMajor = resolveNodeMajor(requirement);
     const needsNode = !new RegExp(`\\bv${nodeMajor}\\.`).test(probe.stdout);
-    const needsPhp = !/\bPHP 8\.4\./.test(probe.stdout);
+    const needsPhp = !/^PHP 8\.(?:4|5)\./m.test(probe.stdout);
     const needsComposer = !/\bComposer version 2\./.test(probe.stdout);
 
     if (!needsNode && !needsPhp && !needsComposer) return;
@@ -175,7 +175,7 @@ export class DevelopmentSandboxManager {
     }
 
     if (needsPhp) {
-      commands.push("apt-get install -y --no-install-recommends php8.4-cli");
+      commands.push("apt-get install -y --no-install-recommends php-cli");
     }
 
     if (needsComposer) {
@@ -205,7 +205,7 @@ export class DevelopmentSandboxManager {
     const nodeMajor = resolveNodeMajor(requirement);
     const result = await sandbox.exec("git --version && node --version && php --version && composer --version", { cwd, timeoutSec: 30 });
     if (result.exitCode !== 0 || result.timedOut) throw new Error(`Toolchain validation failed: ${result.stderr || result.stdout}`);
-    for (const [name, pattern] of [["Node", new RegExp(`\\bv${nodeMajor}\\.`)], ["PHP", /PHP 8\.4\./], ["Composer", /Composer version 2\./]] as const) {
+    for (const [name, pattern] of [["Node", new RegExp(`\\bv${nodeMajor}\\.`)], ["PHP", /^PHP 8\.(?:4|5)\./m], ["Composer", /Composer version 2\./]] as const) {
       if (!pattern.test(result.stdout)) throw new Error(`${name} requirement not satisfied: ${result.stdout}`);
     }
   }
