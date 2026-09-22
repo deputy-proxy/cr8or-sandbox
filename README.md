@@ -5,7 +5,7 @@ A small remote MCP server that exposes Railway Sandboxes as a development execut
 The intended loop is:
 
 ```text
-ChatGPT -> remote MCP /mcp -> Railway Sandbox MCP -> Railway SDK -> Railway Sandbox -> git / PHP / Composer / Artisan / npm / tests
+ChatGPT -> remote MCP /mcp -> Railway Sandbox MCP -> Railway SDK -> Railway Sandbox -> git / PHP / Composer / npm / tests
 ```
 
 This keeps development infrastructure separate from the application repositories being worked on.
@@ -57,7 +57,9 @@ repository -> repository_prepare
                  +-> no usable Sandbox -> create -> install toolchain -> clone -> persist marker -> checkout
 ```
 
-The development template provisions Git, Node.js 24, PHP CLI 8.4 or newer, and Composer 2 by default. During repository preparation, the manager reads `.nvmrc`, `.node-version`, or `package.json` `engines.node` and reconciles Node.js to the repository's declared major version. Open minimum ranges such as `>=22` use the current default major (24), while exact or bounded major requirements are respected. The repository marker is `/root/.railway-sandbox-mcp/repository.json` and contains repository metadata plus the Sandbox ID. Credentials are never stored there.
+The development template is intentionally minimal and installs only the stable base packages required to bootstrap a development Sandbox. Node.js and Composer are installed or reconciled **after the Sandbox is created**, based on the repository's declared Node.js requirement. This keeps template builds independent of repository-specific toolchains and makes bootstrap failures observable and recoverable at runtime. PHP CLI is installed from the distribution package and PHP 8.4 or 8.5 is accepted.
+
+During repository preparation, the manager reads `.nvmrc`, `.node-version`, or `package.json` `engines.node` and reconciles Node.js to the repository's declared major version. Open minimum ranges such as `>=22` use the current default major (24), while exact or bounded major requirements are respected. The repository marker is `/root/.railway-sandbox-mcp/repository.json` and contains repository metadata plus the Sandbox ID. Credentials are never stored there.
 
 Each issue uses a normal Git branch inside the same persistent repository worktree. Before preparing an issue, the manager fetches remote state, resets the worktree to `origin/HEAD`, removes untracked files, and checks out the requested branch. If that branch does not exist remotely, it is created from the default branch.
 
