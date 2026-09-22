@@ -236,5 +236,5 @@ export class DevelopmentSandboxManager {
 }
 
 function quote(value: string): string {
-  return `'${value.replace(/'/g, `'\\""\\"'`)}'`;
+  return `'${value.replace(/'/g, `'\"'\"'`)}'`;
 }
