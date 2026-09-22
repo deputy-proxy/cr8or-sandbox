@@ -59,20 +59,18 @@ export function resolveNodeMajor(requirement: string, preferredMajor = 24): numb
 
   throw new Error(`Unsupported Node.js version requirement: ${requirement}`);
 }
+
 export function repositoryWorktreePath(repository: string, root = DEFAULT_WORKSPACE_ROOT): string {
   const [owner, name] = normalizeRepositoryIdentity(repository).split("/");
   return `${root}/${owner}/${name}`;
 }
 
 export function createDevelopmentSandboxTemplate(): SandboxTemplate {
+  // Keep the template build deterministic and minimal. Repository-specific
+  // Node.js and Composer setup happens after the Sandbox exists, where
+  // failures are observable and can be retried without rebuilding a template.
   return Sandbox.template()
-    .withPackages("git", "curl", "ca-certificates", "unzip")
-    .run("curl -fsSL https://deb.nodesource.com/setup_24.x | bash -")
-    .run("apt-get update && apt-get install -y --no-install-recommends nodejs")
-    .run("apt-get update && apt-get install -y --no-install-recommends php-cli")
-    .run("curl -fsSL https://getcomposer.org/installer -o /tmp/composer-setup.php")
-    .run("php /tmp/composer-setup.php --install-dir=/usr/local/bin --filename=composer")
-    .run("rm -f /tmp/composer-setup.php")
+    .withPackages("git", "curl", "ca-certificates", "unzip", "php-cli")
     .workdir("/root");
 }
 
@@ -102,11 +100,12 @@ export class DevelopmentSandboxManager {
         const worktreePath = repositoryWorktreePath(repository);
         const clone = await sandbox.exec(`mkdir -p $(dirname ${quote(worktreePath)}) && git clone ${quote(repositoryUrl)} ${quote(worktreePath)}`, { cwd: "/root", timeoutSec: 180 });
         if (clone.exitCode !== 0 || clone.timedOut) throw new Error(`Repository clone failed: ${clone.stderr || clone.stdout}`);
+
+        const record: RepositorySandboxRecord = { repository, repositoryUrl, sandboxId: sandbox.id, worktreePath, updatedAt: new Date().toISOString() };
+        await this.checkout(sandbox, record, options.branch);
         await this.reconcileToolchain(sandbox, worktreePath);
         await this.validate(sandbox, worktreePath);
-        const record: RepositorySandboxRecord = { repository, repositoryUrl, sandboxId: sandbox.id, worktreePath, updatedAt: new Date().toISOString() };
         await sandbox.files.write(REPOSITORY_MARKER, `${JSON.stringify(record, null, 2)}\n`);
-        await this.checkout(sandbox, record, options.branch);
         return { sandbox, record, reused: false };
       } catch (error) {
         try { await sandbox.destroy(); } catch { /* keep original error */ }
@@ -139,9 +138,10 @@ export class DevelopmentSandboxManager {
       "git clean -fdx",
     ].join(" && "), { cwd: record.worktreePath, timeoutSec: 120 });
     if (result.exitCode !== 0 || result.timedOut) throw new Error(`Repository synchronization failed: ${result.stderr || result.stdout}`);
+
+    await this.checkout(sandbox, record, options.branch);
     await this.reconcileToolchain(sandbox, record.worktreePath);
     await this.validate(sandbox, record.worktreePath);
-    await this.checkout(sandbox, record, options.branch);
     await sandbox.files.write(REPOSITORY_MARKER, `${JSON.stringify({ ...record, repositoryUrl: options.repositoryUrl, updatedAt: new Date().toISOString() }, null, 2)}\n`);
   }
 
@@ -200,6 +200,7 @@ export class DevelopmentSandboxManager {
     if (result.exitCode !== 0 || result.timedOut) throw new Error(`Node.js requirement detection failed: ${result.stderr || result.stdout}`);
     return result.stdout.trim() || ">=22";
   }
+
   private async validate(sandbox: Sandbox, cwd: string): Promise<void> {
     const requirement = await this.detectNodeRequirement(sandbox, cwd);
     const nodeMajor = resolveNodeMajor(requirement);
@@ -211,13 +212,14 @@ export class DevelopmentSandboxManager {
   }
 
   private async checkout(sandbox: Sandbox, record: RepositorySandboxRecord, branch: string): Promise<void> {
-    const branchName = quote(branch);
+    const branchArgument = quote(branch);
+    const remoteBranchReference = `refs/remotes/origin/${branch}`;
     const result = await sandbox.exec([
       "git fetch --prune origin",
-      `if git show-ref --verify --quiet refs/remotes/origin/${branchName}; then`,
-      `  git checkout -B ${branchName} origin/${branchName}`,
+      `if git show-ref --verify --quiet ${quote(remoteBranchReference)}; then`,
+      `  git checkout -B ${branchArgument} origin/${branchArgument}`,
       "else",
-      `  git checkout -B ${branchName} origin/HEAD`,
+      `  git checkout -B ${branchArgument} origin/HEAD`,
       "fi",
     ].join("\n"), { cwd: record.worktreePath, timeoutSec: 120 });
     if (result.exitCode !== 0 || result.timedOut) throw new Error(`Branch preparation failed: ${result.stderr || result.stdout}`);
@@ -234,5 +236,5 @@ export class DevelopmentSandboxManager {
 }
 
 function quote(value: string): string {
-  return `'${value.replace(/'/g, `'\"'\"'`)}'`;
+  return `'${value.replace(/'/g, `'\\""\\"'`)}'`;
 }
