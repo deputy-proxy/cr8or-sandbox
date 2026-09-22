@@ -57,7 +57,7 @@ repository -> repository_prepare
                  +-> no usable Sandbox -> create -> install toolchain -> clone -> persist marker -> checkout
 ```
 
-The development template provisions Git, Node.js 24, PHP 8.4, and Composer 2 by default. During repository preparation, the manager reads `.nvmrc`, `.node-version`, or `package.json` `engines.node` and reconciles Node.js to the repository's declared major version. Open minimum ranges such as `>=22` use the current default major (24), while exact or bounded major requirements are respected. The repository marker is `/root/.railway-sandbox-mcp/repository.json` and contains repository metadata plus the Sandbox ID. Credentials are never stored there.
+The development template provisions Git, Node.js 24, PHP CLI 8.4 or newer, and Composer 2 by default. During repository preparation, the manager reads `.nvmrc`, `.node-version`, or `package.json` `engines.node` and reconciles Node.js to the repository's declared major version. Open minimum ranges such as `>=22` use the current default major (24), while exact or bounded major requirements are respected. The repository marker is `/root/.railway-sandbox-mcp/repository.json` and contains repository metadata plus the Sandbox ID. Credentials are never stored there.
 
 Each issue uses a normal Git branch inside the same persistent repository worktree. Before preparing an issue, the manager fetches remote state, resets the worktree to `origin/HEAD`, removes untracked files, and checks out the requested branch. If that branch does not exist remotely, it is created from the default branch.
 
