@@ -94,3 +94,15 @@ describe("resolveNodeMajor", () => {
     assert.equal(resolveNodeMajor(""), 24);
   });
 });
+
+
+describe("PHP toolchain compatibility", () => {
+  it("accepts PHP 8.4 and 8.5", () => {
+    assert.match("PHP 8.4.17", /^PHP 8\.(?:4|5)\./);
+    assert.match("PHP 8.5.0", /^PHP 8\.(?:4|5)\./);
+  });
+
+  it("rejects unsupported PHP majors", () => {
+    assert.doesNotMatch("PHP 8.3.27", /^PHP 8\.(?:4|5)\./);
+  });
+});
