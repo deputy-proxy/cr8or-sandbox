@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  DEFAULT_IDLE_TIMEOUT_MINUTES,
   DEFAULT_WORKSPACE_ROOT,
   REPOSITORY_MARKER,
   normalizeGitHubRepositoryUrl,
@@ -64,6 +65,12 @@ describe("repositoryWorktreePath", () => {
       repositoryWorktreePath("deputy-proxy/valid-guide", "/workspace"),
       "/workspace/deputy-proxy/valid-guide",
     );
+  });
+});
+
+describe("sandbox defaults", () => {
+  it("uses a three-minute default idle timeout", () => {
+    assert.equal(DEFAULT_IDLE_TIMEOUT_MINUTES, 3);
   });
 });
 

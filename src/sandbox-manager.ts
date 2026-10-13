@@ -2,6 +2,7 @@ import { Sandbox, type SandboxTemplate } from "railway";
 
 export const REPOSITORY_MARKER = "/root/.railway-sandbox-mcp/repository.json";
 export const DEFAULT_WORKSPACE_ROOT = "/root/workspaces";
+export const DEFAULT_IDLE_TIMEOUT_MINUTES = 3;
 
 export interface RepositorySandboxRecord {
   repository: string;
@@ -91,7 +92,7 @@ export class DevelopmentSandboxManager {
       }
 
       const sandbox = await Sandbox.create(this.templateFactory(), {
-        idleTimeoutMinutes: options.idleTimeoutMinutes ?? 0,
+        idleTimeoutMinutes: options.idleTimeoutMinutes ?? DEFAULT_IDLE_TIMEOUT_MINUTES,
         ...(options.region ? { region: options.region } : {}),
         networkIsolation: options.networkIsolation ?? "ISOLATED",
       });

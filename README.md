@@ -65,7 +65,7 @@ Each issue uses a normal Git branch inside the same persistent repository worktr
 
 A repository-specific in-process lock prevents concurrent preparation of the same repository within one MCP instance. It is not distributed across multiple MCP replicas.
 
-Repository Sandboxes are persistent by default. An explicit idle timeout can still be supplied, subject to Railway plan limits.
+New Sandboxes use a default idle timeout of **3 minutes**. Both `sandbox_create` and `repository_prepare` apply this default when `idleTimeoutMinutes` is omitted; callers can supply a different positive timeout explicitly, subject to Railway plan limits. This is a creation-time setting: reusing an existing repository Sandbox does not change its already-configured timeout.
 
 ## Development loop
 
