@@ -5,6 +5,7 @@ import { type Request, type Response } from "express";
 import { Sandbox } from "railway";
 import * as z from "zod/v4";
 import {
+  DEFAULT_IDLE_TIMEOUT_MINUTES,
   DevelopmentSandboxManager,
   normalizeRepositoryIdentity,
 } from "./sandbox-manager.js";
@@ -52,7 +53,7 @@ function buildServer(): McpServer {
     {
       description: "Create a Railway Sandbox for development work and return its ID.",
       inputSchema: z.object({
-        idleTimeoutMinutes: z.number().int().min(1).max(1440).optional(),
+        idleTimeoutMinutes: z.number().int().min(1).max(1440).default(DEFAULT_IDLE_TIMEOUT_MINUTES),
         networkIsolation: z.enum(["ISOLATED", "PRIVATE"]).optional(),
         region: z.string().min(1).max(100).optional(),
       }),
